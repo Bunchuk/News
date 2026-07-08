@@ -1,1 +1,44 @@
+name: News Digest
 
+on:
+  schedule:
+    - cron: "0 5 * * *"
+    - cron: "0 17 * * *"
+  workflow_dispatch:
+    inputs:
+      slot:
+        description: "morning / evening (порожнє = авто за часом)"
+        required: false
+        default: ""
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Restore digest state
+        uses: actions/cache@v4
+        with:
+          path: state.db
+          key: news-db-${{ github.run_id }}
+          restore-keys: |
+            news-db-
+
+      - name: Run digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SLOT: ${{ github.event.inputs.slot }}
+        run: python main.py
