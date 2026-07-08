@@ -1,0 +1,53 @@
+name: News Digest
+
+on:
+  schedule:
+    # Cron у GitHub Actions — завжди в UTC і НЕ враховує переходу на літній час.
+    # Зараз літо (Київ = UTC+3):
+    #   05:00 UTC = 08:00 Київ (ранок)
+    #   17:00 UTC = 20:00 Київ (вечір)
+    # Взимку (Київ = UTC+2) ці ж рядки дадуть 07:00 і 19:00 — за потреби
+    # зсунь на '0 6' та '0 18'.
+    - cron: "0 5 * * *"
+    - cron: "0 17 * * *"
+  workflow_dispatch:        # ручний запуск з вкладки Actions
+    inputs:
+      slot:
+        description: "morning / evening (порожнє = авто за часом)"
+        required: false
+        default: ""
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      # Персистимо SQLite-пам'ять переглянутих новин між запусками.
+      # Rolling-ключ: щоразу зберігається свіжа копія (key з run_id),
+      # а відновлюється остання наявна (restore-keys за префіксом).
+      - name: Restore digest state
+        uses: actions/cache@v4
+        with:
+          path: state.db
+          key: news-db-${{ github.run_id }}
+          restore-keys: |
+            news-db-
+
+      - name: Run digest
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SLOT: ${{ github.event.inputs.slot }}
+        run: python main.py
